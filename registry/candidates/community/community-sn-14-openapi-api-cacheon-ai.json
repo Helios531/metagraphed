@@ -15,14 +15,17 @@
       "source_tier": "community-docs",
       "source_type": "community-pr-intake",
       "source_url": "https://cacheon.ai/docs/monitoring",
-      "source_urls": ["https://cacheon.ai/docs/monitoring", "https://api.cacheon.ai/openapi.json"],
+      "source_urls": [
+        "https://cacheon.ai/docs/monitoring",
+        "https://api.cacheon.ai/openapi.json"
+      ],
       "state": "schema-valid",
       "url": "https://api.cacheon.ai/openapi.json"
     }
   ],
   "schema_version": 1,
   "submission": {
-    "submitted_by": "kiannidev",
-    "submitted_by_url": "https://github.com/kiannidev"
+    "submitted_by": "Helios531",
+    "submitted_by_url": "https://github.com/helios531"
   }
 }
