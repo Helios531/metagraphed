@@ -10,6 +10,7 @@
 
 import { DAY_MS, MAX_UPTIME_ROWS, UPTIME_WINDOWS } from "../config.mjs";
 import { errorResponse } from "../http.mjs";
+import { parseNonNegativeIntParam } from "../request-params.mjs";
 import { readArtifact } from "../storage.mjs";
 import { contractVersion, envelopeResponse } from "../responses.mjs";
 import {
@@ -117,7 +118,7 @@ export async function handleEconomicsTrends(request, env, url) {
 
 // Long-term daily uptime history for one subnet's operational surfaces.
 export async function handleUptime(request, env, netuid, url) {
-  const validationError = validateQueryParams(url, ["window"]);
+  const validationError = validateQueryParams(url, ["window", "min_samples"]);
   if (validationError) return analyticsQueryError(validationError);
   const windowParam = url.searchParams.get("window") || "90d";
   if (!Object.hasOwn(UPTIME_WINDOWS, windowParam)) {
@@ -128,37 +129,48 @@ export async function handleUptime(request, env, netuid, url) {
       { parameter: "window" },
     );
   }
+  const minSamples = parseNonNegativeIntParam(
+    url.searchParams.get("min_samples"),
+    "min_samples",
+  );
+  if (minSamples.error) return analyticsQueryError(minSamples.error);
   const days = UPTIME_WINDOWS[windowParam];
   const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
     .toISOString()
     .slice(0, 10);
+  const params = [netuid, cutoff];
+  let sql = `SELECT MAX(surface_id) AS surface_id,
+                    COALESCE(surface_key, surface_id) AS surface_key,
+                    day,
+                    SUM(samples) AS samples,
+                    SUM(ok_count) AS ok_count,
+                    CASE
+                      WHEN SUM(samples) > 0 THEN ROUND(CAST(SUM(ok_count) AS REAL) / SUM(samples), 4)
+                      ELSE NULL
+                    END AS uptime_ratio,
+                    ${dailyLatencyColumns({ roundedAvg: true })},
+                    MAX(p50_latency_ms) AS p50,
+                    MAX(p95_latency_ms) AS p95,
+                    MAX(p99_latency_ms) AS p99,
+                    CASE
+                      WHEN SUM(samples) = 0 THEN 'unknown'
+                      WHEN SUM(ok_count) = SUM(samples) THEN 'ok'
+                      WHEN SUM(ok_count) = 0 THEN 'failed'
+                      ELSE 'degraded'
+                    END AS status
+             FROM surface_uptime_daily
+             WHERE netuid = ? AND day >= ?
+             GROUP BY COALESCE(surface_key, surface_id), day`;
+  if (minSamples.value !== null) {
+    sql += " HAVING SUM(samples) >= ?";
+    params.push(minSamples.value);
+  }
+  sql += " ORDER BY day DESC LIMIT ?";
+  params.push(MAX_UPTIME_ROWS);
   const rows = await d1All(
     env,
-    `SELECT MAX(surface_id) AS surface_id,
-            COALESCE(surface_key, surface_id) AS surface_key,
-            day,
-            SUM(samples) AS samples,
-            SUM(ok_count) AS ok_count,
-            CASE
-              WHEN SUM(samples) > 0 THEN ROUND(CAST(SUM(ok_count) AS REAL) / SUM(samples), 4)
-              ELSE NULL
-            END AS uptime_ratio,
-            ${dailyLatencyColumns({ roundedAvg: true })},
-            MAX(p50_latency_ms) AS p50,
-            MAX(p95_latency_ms) AS p95,
-            MAX(p99_latency_ms) AS p99,
-            CASE
-              WHEN SUM(samples) = 0 THEN 'unknown'
-              WHEN SUM(ok_count) = SUM(samples) THEN 'ok'
-              WHEN SUM(ok_count) = 0 THEN 'failed'
-              ELSE 'degraded'
-            END AS status
-     FROM surface_uptime_daily
-     WHERE netuid = ? AND day >= ?
-     GROUP BY COALESCE(surface_key, surface_id), day
-     ORDER BY day DESC
-     LIMIT ?`,
-    [netuid, cutoff, MAX_UPTIME_ROWS],
+    sql,
+    params,
   );
   const healthMeta = await readHealthMetaKv(env);
   const data = formatUptime({
@@ -187,12 +199,23 @@ export async function handleUptime(request, env, netuid, url) {
 // ?window=90d request both resolve to the same edge-cache entry — mirrors
 // canonicalSubnetConcentrationHistoryCachePath in entities.mjs.
 export function canonicalUptimeCachePath(url) {
-  const validationError = validateQueryParams(url, ["window"]);
+  const validationError = validateQueryParams(url, ["window", "min_samples"]);
   if (validationError) return `${url.pathname}${url.search}`;
   const windowParam = url.searchParams.get("window") || "90d";
   if (!Object.hasOwn(UPTIME_WINDOWS, windowParam))
     return `${url.pathname}${url.search}`;
-  return `${url.pathname}?window=${encodeURIComponent(windowParam)}`;
+  const minSamples = parseNonNegativeIntParam(
+    url.searchParams.get("min_samples"),
+    "min_samples",
+  );
+  if (minSamples.error) return `${url.pathname}${url.search}`;
+  const params = new URLSearchParams({
+    window: windowParam,
+  });
+  if (minSamples.value !== null) {
+    params.set("min_samples", String(minSamples.value));
+  }
+  return `${url.pathname}?${params.toString()}`;
 }
 
 // Normalises the economics-trends URL so that a bare ?-free request and an explicit

@@ -34468,6 +34468,15 @@
               ],
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "min_samples",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
           }
         ],
         "responses": {
@@ -34608,7 +34617,7 @@
             "description": "Unexpected backend error."
           }
         },
-        "summary": "Fetch long-term daily uptime history per operational surface for one subnet over a 90d or 1y window (computed live from the surface_uptime_daily D1 rollup).",
+        "summary": "Fetch long-term daily uptime history per operational surface for one subnet over a 90d or 1y window (computed live from the surface_uptime_daily D1 rollup). Optional `min_samples` excludes sparse days whose summed sample count falls below the bound.",
         "tags": [
           "health",
           "subnets",

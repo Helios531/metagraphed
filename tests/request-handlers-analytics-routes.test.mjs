@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { describe, test, beforeEach } from "vitest";
 import { createLocalArtifactEnv } from "../scripts/lib.mjs";
+import { MAX_UPTIME_ROWS } from "../workers/config.mjs";
 import {
   canonicalCompareCachePath,
   canonicalEconomicsTrendsCachePath,
@@ -289,6 +290,79 @@ describe("handleUptime", () => {
     assert.equal(body.data.surfaces[0].surface_id, "sn-7-acme-subnet-api");
     assert.equal(body.data.surfaces[0].days[0].uptime_ratio, 0.9);
   });
+
+  test("rejects a malformed min_samples value", async () => {
+    const res = await handleUptime(
+      req("/"),
+      {},
+      NETUID,
+      url("/?window=90d&min_samples=bogus"),
+    );
+    const body = await errorJson(res);
+    assert.equal(body.meta.parameter, "min_samples");
+  });
+
+  test("adds a HAVING SUM(samples) >= ? clause when min_samples is present", async () => {
+    const seen = [];
+    const env = {
+      METAGRAPH_HEALTH_DB: {
+        prepare(sql) {
+          return {
+            bind(...params) {
+              seen.push({ sql, params });
+              return {
+                async all() {
+                  return { results: [] };
+                },
+              };
+            },
+          };
+        },
+      },
+    };
+
+    await json(
+      await handleUptime(
+        req("/"),
+        env,
+        NETUID,
+        url("/?window=1y&min_samples=3"),
+      ),
+    );
+
+    assert.match(seen[0].sql, /HAVING SUM\(samples\) >= \?/);
+    assert.equal(seen[0].params[0], NETUID);
+    assert.equal(seen[0].params[2], 3);
+    assert.equal(seen[0].params[3], MAX_UPTIME_ROWS);
+  });
+
+  test("omits the HAVING clause when min_samples is absent", async () => {
+    const seen = [];
+    const env = {
+      METAGRAPH_HEALTH_DB: {
+        prepare(sql) {
+          return {
+            bind(...params) {
+              seen.push({ sql, params });
+              return {
+                async all() {
+                  return { results: [] };
+                },
+              };
+            },
+          };
+        },
+      },
+    };
+
+    await json(
+      await handleUptime(req("/"), env, NETUID, url("/?window=90d")),
+    );
+
+    assert.doesNotMatch(seen[0].sql, /HAVING SUM\(samples\) >= \?/);
+    assert.equal(seen[0].params[0], NETUID);
+    assert.equal(seen[0].params[2], MAX_UPTIME_ROWS);
+  });
 });
 
 describe("handleLeaderboards", () => {
@@ -472,6 +546,15 @@ describe("canonicalUptimeCachePath", () => {
     );
   });
 
+  test("includes min_samples in the normalized cache key", () => {
+    assert.equal(
+      canonicalUptimeCachePath(
+        url("/api/v1/subnets/7/uptime?min_samples=3&window=90d"),
+      ),
+      "/api/v1/subnets/7/uptime?window=90d&min_samples=3",
+    );
+  });
+
   test("falls back to raw search on unknown query param", () => {
     const raw = "/api/v1/subnets/7/uptime?unknown=x";
     assert.equal(canonicalUptimeCachePath(url(raw)), raw);
@@ -479,6 +562,11 @@ describe("canonicalUptimeCachePath", () => {
 
   test("falls back to raw search on invalid window value", () => {
     const raw = "/api/v1/subnets/7/uptime?window=7d";
+    assert.equal(canonicalUptimeCachePath(url(raw)), raw);
+  });
+
+  test("falls back to raw search on invalid min_samples value", () => {
+    const raw = "/api/v1/subnets/7/uptime?window=90d&min_samples=bogus";
     assert.equal(canonicalUptimeCachePath(url(raw)), raw);
   });
 });
