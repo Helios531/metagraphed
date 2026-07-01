@@ -12,7 +12,10 @@ import {
   buildApiIndexArtifact,
   buildContractsArtifact,
   buildOpenApiArtifact,
+  buildRouteQueryContract,
   compileRoutePattern,
+  normalizeQueryParameters,
+  queryCollection,
 } from "../src/contracts.mjs";
 import { evaluateArtifactBudgets } from "../scripts/artifact-budgets.mjs";
 import { loadOpenApiComponentSchemas } from "../scripts/openapi-components.mjs";
@@ -316,6 +319,47 @@ describe("public contract registry", () => {
       "score",
       "status",
     ]);
+  });
+
+  test("buildRouteQueryContract defaults missing route and collection arrays", () => {
+    API_QUERY_COLLECTIONS["test-fallbacks"] = { data_key: "rows" };
+    try {
+      assert.equal(buildRouteQueryContract({ query_collection: null }), null);
+      assert.deepEqual(
+        buildRouteQueryContract({
+          query_collection: "test-fallbacks",
+          query_filter_names: null,
+          query_parameters: null,
+        }),
+        {
+          collection: "test-fallbacks",
+          data_key: "rows",
+          filter_names: [],
+          range_filters: [],
+          sort_fields: [],
+          query_parameters: [],
+        },
+      );
+    } finally {
+      delete API_QUERY_COLLECTIONS["test-fallbacks"];
+    }
+  });
+
+  test("queryCollection and normalizeQueryParameters default missing optional metadata", () => {
+    assert.deepEqual(queryCollection("rows"), {
+      data_key: "rows",
+      filters: {},
+      csv_filters: {},
+      array_filters: {},
+      range_filters: [],
+      search_keys: [],
+      sort_fields: [],
+    });
+    assert.deepEqual(normalizeQueryParameters({}), {
+      collection: null,
+      filterNames: [],
+      parameters: [],
+    });
   });
 
   test("requires canonical component schemas before building OpenAPI", () => {

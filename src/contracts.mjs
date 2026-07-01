@@ -2783,7 +2783,7 @@ export function buildOpenApiArtifact(generatedAt, componentSchemas) {
   };
 }
 
-function buildRouteQueryContract(routeEntry) {
+export function buildRouteQueryContract(routeEntry) {
   if (!routeEntry?.query_collection) {
     return null;
   }
@@ -2883,7 +2883,7 @@ function route(
   };
 }
 
-function queryCollection(dataKey, options = {}) {
+export function queryCollection(dataKey, options = {}) {
   return {
     data_key: dataKey,
     filters: options.filters || {},
@@ -2960,7 +2960,7 @@ function listQuery(collection, options = {}) {
   };
 }
 
-function normalizeQueryParameters(queryParameters) {
+export function normalizeQueryParameters(queryParameters) {
   if (Array.isArray(queryParameters)) {
     return { collection: null, filterNames: [], parameters: queryParameters };
   }
