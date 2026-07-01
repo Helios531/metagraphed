@@ -2176,14 +2176,6 @@ export interface components {
             description?: string;
             id: string;
             path: string;
-            query_contract?: {
-                collection: string;
-                data_key: string | null;
-                filter_names: string[];
-                query_parameters: components["schemas"]["ApiQueryParameter"][];
-                range_filters: string[];
-                sort_fields: string[];
-            } | null;
             schema_ref: string | null;
             /** @enum {unknown} */
             storage_tier: "dual" | "git" | "r2";

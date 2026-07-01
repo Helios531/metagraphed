@@ -12,10 +12,7 @@ import {
   buildApiIndexArtifact,
   buildContractsArtifact,
   buildOpenApiArtifact,
-  buildRouteQueryContract,
   compileRoutePattern,
-  normalizeQueryParameters,
-  queryCollection,
 } from "../src/contracts.mjs";
 import { evaluateArtifactBudgets } from "../scripts/artifact-budgets.mjs";
 import { loadOpenApiComponentSchemas } from "../scripts/openapi-components.mjs";
@@ -188,19 +185,14 @@ describe("public contract registry", () => {
         .schema.enum.includes("score"),
       true,
     );
-    const endpointContract = contracts.artifacts.find(
-      (artifact) => artifact.id === "endpoints",
-    ).query_contract;
-    assert.equal(endpointContract.collection, "endpoints");
-    assert.deepEqual(endpointContract.range_filters, ["latency_ms", "score"]);
     assert.equal(
-      endpointContract.query_parameters.some(
+      endpointParameters.some(
         (parameter) => parameter.name === "min_latency_ms",
       ),
       true,
     );
     assert.equal(
-      endpointContract.query_parameters.some(
+      endpointParameters.some(
         (parameter) => parameter.name === "max_score",
       ),
       true,
@@ -218,148 +210,6 @@ describe("public contract registry", () => {
         .enum,
       ["active", "resolved"],
     );
-  });
-
-  test("contracts artifact leaves query_contract null for non-route artifacts", () => {
-    const contracts = buildContractsArtifact("1970-01-01T00:00:00.000Z");
-    const typeDefinitions = contracts.artifacts.find(
-      (artifact) => artifact.id === "type-definitions",
-    );
-    assert.equal(typeDefinitions.query_contract, null);
-  });
-
-  test("contracts artifact omits query_contract when a route's query collection metadata is absent", () => {
-    const fakeRoute = {
-      id: "test-missing-query-collection",
-      method: "GET",
-      path: "/api/v1/test-missing-query-collection",
-      artifact_path: "/metagraph/test-missing-query-collection.json",
-      description: "Synthetic route for query-contract fallback coverage.",
-      cache: null,
-      tags: ["test"],
-      query_collection: "missing-query-collection",
-      query_filter_names: null,
-      query_parameters: null,
-      path_parameters: [],
-    };
-    const fakeArtifact = {
-      id: "test-missing-query-collection",
-      path: fakeRoute.artifact_path,
-      description: fakeRoute.description,
-      schema_ref: null,
-      storage_tier: "r2",
-    };
-    const routeCount = API_ROUTES.length;
-    const artifactCount = PUBLIC_ARTIFACTS.length;
-
-    API_ROUTES.push(fakeRoute);
-    PUBLIC_ARTIFACTS.push(fakeArtifact);
-    try {
-      const contracts = buildContractsArtifact("1970-01-01T00:00:00.000Z");
-      const entry = contracts.artifacts.find(
-        (artifact) => artifact.id === fakeArtifact.id,
-      );
-      assert.equal(entry.query_contract, null);
-    } finally {
-      API_ROUTES.length = routeCount;
-      PUBLIC_ARTIFACTS.length = artifactCount;
-    }
-  });
-
-  test("API index preserves array-form route query parameters without inventing a collection", () => {
-    const fakeRoute = {
-      id: "test-array-query-parameters",
-      method: "GET",
-      path: "/api/v1/test-array-query-parameters",
-      artifact_path: "/metagraph/test-array-query-parameters.json",
-      description: "Synthetic route for array-form query parameter coverage.",
-      cache: null,
-      tags: ["test"],
-      query_collection: null,
-      query_filter_names: [],
-      query_parameters: [{ name: "plain", schema: { type: "string" } }],
-      path_parameters: [],
-    };
-    const routeCount = API_ROUTES.length;
-
-    API_ROUTES.push(fakeRoute);
-    try {
-      const apiIndex = buildApiIndexArtifact("1970-01-01T00:00:00.000Z", {
-        artifacts: [],
-      });
-      const route = apiIndex.routes.find((entry) => entry.id === fakeRoute.id);
-      assert.equal(route.query_collection, null);
-      assert.deepEqual(route.query_filter_names, []);
-      assert.deepEqual(route.query_parameters, fakeRoute.query_parameters);
-    } finally {
-      API_ROUTES.length = routeCount;
-    }
-  });
-
-  test("contracts artifact joins route metadata by artifact_path", () => {
-    const contracts = buildContractsArtifact("1970-01-01T00:00:00.000Z");
-    const apiIndexArtifact = contracts.artifacts.find(
-      (artifact) => artifact.id === "api-index",
-    );
-    const endpointsArtifact = contracts.artifacts.find(
-      (artifact) => artifact.id === "endpoints",
-    );
-
-    assert.equal(apiIndexArtifact.query_contract, null);
-    assert.equal(endpointsArtifact.query_contract.collection, "endpoints");
-    assert.deepEqual(endpointsArtifact.query_contract.sort_fields, [
-      "kind",
-      "last_checked",
-      "latency_ms",
-      "layer",
-      "netuid",
-      "pool_eligible",
-      "provider",
-      "publication_state",
-      "score",
-      "status",
-    ]);
-  });
-
-  test("buildRouteQueryContract defaults missing route and collection arrays", () => {
-    API_QUERY_COLLECTIONS["test-fallbacks"] = { data_key: "rows" };
-    try {
-      assert.equal(buildRouteQueryContract({ query_collection: null }), null);
-      assert.deepEqual(
-        buildRouteQueryContract({
-          query_collection: "test-fallbacks",
-          query_filter_names: null,
-          query_parameters: null,
-        }),
-        {
-          collection: "test-fallbacks",
-          data_key: "rows",
-          filter_names: [],
-          range_filters: [],
-          sort_fields: [],
-          query_parameters: [],
-        },
-      );
-    } finally {
-      delete API_QUERY_COLLECTIONS["test-fallbacks"];
-    }
-  });
-
-  test("queryCollection and normalizeQueryParameters default missing optional metadata", () => {
-    assert.deepEqual(queryCollection("rows"), {
-      data_key: "rows",
-      filters: {},
-      csv_filters: {},
-      array_filters: {},
-      range_filters: [],
-      search_keys: [],
-      sort_fields: [],
-    });
-    assert.deepEqual(normalizeQueryParameters({}), {
-      collection: null,
-      filterNames: [],
-      parameters: [],
-    });
   });
 
   test("requires canonical component schemas before building OpenAPI", () => {
