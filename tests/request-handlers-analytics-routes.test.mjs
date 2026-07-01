@@ -298,6 +298,7 @@ describe("handleUptime", () => {
       NETUID,
       url("/?window=90d&min_samples=bogus"),
     );
+    assert.equal(res.status, 400);
     const body = await errorJson(res);
     assert.equal(body.meta.parameter, "min_samples");
   });
@@ -334,6 +335,41 @@ describe("handleUptime", () => {
     assert.equal(seen[0].params[0], NETUID);
     assert.equal(seen[0].params[2], 3);
     assert.equal(seen[0].params[3], MAX_UPTIME_ROWS);
+  });
+
+  test("min_samples excludes rows below the requested sample threshold", async () => {
+    const env = d1Env({
+      "FROM surface_uptime_daily": [
+        {
+          surface_id: "sn-7-kept-subnet-api",
+          surface_key: "kept",
+          day: "2026-06-02",
+          samples: 5,
+          ok_count: 5,
+          uptime_ratio: 1,
+          avg_latency_ms: 100,
+          latency_samples: 5,
+          p50: 100,
+          p95: 110,
+          p99: 120,
+          status: "ok",
+        },
+      ],
+    });
+
+    const body = await json(
+      await handleUptime(
+        req("/"),
+        env,
+        NETUID,
+        url("/?window=90d&min_samples=5"),
+      ),
+    );
+
+    assert.equal(body.data.surfaces.length, 1);
+    assert.equal(body.data.surfaces[0].surface_id, "sn-7-kept-subnet-api");
+    assert.equal(body.data.surfaces[0].days.length, 1);
+    assert.equal(body.data.surfaces[0].days[0].samples, 5);
   });
 
   test("omits the HAVING clause when min_samples is absent", async () => {

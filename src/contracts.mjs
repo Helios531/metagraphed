@@ -1135,7 +1135,7 @@ export const PUBLIC_ARTIFACTS = [
   artifact(
     "subnet-uptime",
     "/metagraph/subnets/{netuid}/uptime.json",
-    "Long-term daily uptime history per operational surface for one subnet (90d/1y window), served live from the surface_uptime_daily D1 rollup (no static file).",
+    "Long-term daily uptime history per operational surface for one subnet (90d/1y window), served live from the surface_uptime_daily D1 rollup (no static file). Optional `min_samples` excludes sparse days whose summed sample count falls below the bound.",
     "UptimeArtifact",
   ),
   artifact(
