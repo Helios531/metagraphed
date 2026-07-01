@@ -209,9 +209,10 @@ export function canonicalUptimeCachePath(url) {
     "min_samples",
   );
   if (minSamples.error) return `${url.pathname}${url.search}`;
-  const params = new URLSearchParams({
-    window: windowParam,
-  });
+  const normalized = new URL(url.toString());
+  normalized.search = "";
+  const params = normalized.searchParams;
+  params.set("window", windowParam);
   if (minSamples.value !== null) {
     params.set("min_samples", String(minSamples.value));
   }
